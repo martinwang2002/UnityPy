@@ -235,24 +235,11 @@ def read_value(
             else:
                 clz = getattr(classes, node.m_Type, UnknownObject)
                 try:
+                    if clz is UnknownObject:
+                        raise TypeError
                     value = clz(**value)
                 except TypeError:
-                    keys = set(value.keys())
-                    annotation_keys = set(clz.__annotations__)
-                    missing_keys = annotation_keys - keys
-                    if clz is UnknownObject or missing_keys:
-                        value = UnknownObject(node, **value)
-                    else:
-                        extra_keys = keys - annotation_keys
-                        if extra_keys:
-                            instance = clz(
-                                **{key: value[key] for key in annotation_keys}
-                            )
-                            for key in extra_keys:
-                                setattr(instance, key, value[key])
-                            value = instance
-                        else:
-                            value = UnknownObject(**value)
+                    value = UnknownObject(node, **value)
 
     if align:
         reader.align_stream()
@@ -343,7 +330,6 @@ def read_value_array(
             keys = set(child._clean_name for child in node.m_Children)
             annotation_keys = set(clz.__annotations__)
             missing_keys = annotation_keys - keys
-            extra_keys = keys - annotation_keys
             if missing_keys or clz is UnknownObject:
                 value = [
                     UnknownObject(
@@ -355,23 +341,6 @@ def read_value_array(
                     )
                     for _ in range(size)
                 ]
-            elif extra_keys:
-                value = [None] * size
-                for i in range(size):
-                    value_i_d = {
-                        child._clean_name: read_value(child, reader, config)
-                        for child in node.m_Children
-                    }
-                    value_i = clz(
-                        **{
-                            key: value
-                            for key, value in value_i_d.items()
-                            if key in annotation_keys
-                        }
-                    )
-                    for key in extra_keys:
-                        setattr(value_i, key, value_i_d[key])
-                    value[i] = value_i
             else:
                 value = [
                     clz(

@@ -454,37 +454,11 @@ inline PyObject *read_class(ReaderT *reader, TypeTreeNodeObject *node, TypeTreeR
     return value;
 }
 
-#if PY_VERSION_HEX >= 0x030e0000
-PyObject *get_annotations = nullptr;
-#endif
-
-inline PyObject *get_annotations(PyObject *clz)
-{
-#if PY_VERSION_HEX >= 0x030e0000
-    if (get_annotations == nullptr)
-    {
-        // from annotationlib import get_annotations
-        PyObject *annotationlib = PyImport_ImportModule("annotationlib");
-        get_annotations = PyObject_GetAttrString(annotationlib, "get_annotations");
-        Py_INCREF(get_annotations);
-        Py_DECREF(annotationlib);
-    }
-    return PyObject_CallFunctionObjArgs(get_annotations, clz, NULL);
-#else
-    return PyObject_GetAttrString(clz, "__annotations__");
-#endif
-}
-
 inline PyObject *parse_class(PyObject *kwargs, TypeTreeNodeObject *node, TypeTreeReaderConfigT *config)
 {
     PyObject *instance = nullptr;
     PyObject *clz = nullptr;
     PyObject *args = PyTuple_New(0);
-    PyObject *annotations = nullptr;
-    PyObject *extras = nullptr;
-    // dict iterator values
-    PyObject *key, *value = nullptr;
-    Py_ssize_t pos;
 
     if (node->_data_type == NodeDataType::PPtr)
     {
@@ -518,63 +492,16 @@ inline PyObject *parse_class(PyObject *kwargs, TypeTreeNodeObject *node, TypeTre
     }
     PyErr_Clear();
 
-    // possibly extra fields
-    annotations = get_annotations(clz);
-    if (annotations == nullptr)
-    {
-        PyErr_SetString(PyExc_ValueError, "Failed to get annotations");
-        goto PARSE_CLASS_CLEANUP;
-    }
-    extras = PyDict_New();
-    for (int i = 0; i < PyList_GET_SIZE(node->m_Children); i++)
-    {
-        TypeTreeNodeObject *child = (TypeTreeNodeObject *)PyList_GET_ITEM(node->m_Children, i); // - borrowed ref +/- 0
-        if (PyDict_Contains(annotations, child->_clean_name) == 1)
-        {
-            continue;
-        }
-        PyObject *extra_value = PyDict_GetItem(kwargs, child->_clean_name); // - borrowed ref +/- 0
-        PyDict_SetItem(extras, child->_clean_name, extra_value);            // +1
-        PyDict_DelItem(kwargs, child->_clean_name);                         // -1
-    }
-
-    if (PyDict_Size(extras) == 0)
-    {
-        Py_DECREF(clz);                                                 // 1->0
-        clz = PyObject_GetAttrString(config->classes, "UnknownObject"); // 0->1
-        PyDict_SetItemString(kwargs, "__node__", (PyObject *)node);
-    }
-
-    instance = PyObject_Call(clz, args, kwargs);
-    if (instance != nullptr)
-    {
-        pos = 0;
-        while (PyDict_Next(extras, &pos, &key, &value))
-        {
-            PyObject_GenericSetAttr(instance, key, value);
-        }
-        goto PARSE_CLASS_CLEANUP;
-    }
-    PyErr_Clear();
-
-    // if we still failed to create an instance, fallback to UnknownObject
+    // fallback to UnknownObject
     Py_DECREF(clz);
     clz = PyObject_GetAttrString(config->classes, "UnknownObject");
     PyDict_SetItemString(kwargs, "__node__", (PyObject *)node);
-    // merge extras back into kwargs
-    pos = 0;
-    while (PyDict_Next(extras, &pos, &key, &value))
-    {
-        PyDict_SetItem(kwargs, key, value);
-    }
     instance = PyObject_Call(clz, args, kwargs);
 
 PARSE_CLASS_CLEANUP:
     Py_DECREF(args);
     Py_DECREF(kwargs);
     Py_XDECREF(clz);
-    Py_XDECREF(annotations);
-    Py_XDECREF(extras);
     return instance;
 }
 
