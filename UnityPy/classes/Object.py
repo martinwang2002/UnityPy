@@ -19,7 +19,7 @@ class SubObject(ABC, metaclass=ABCMeta):
             )
             self.__class__.__required_keys__ = required_keys
         if not all(key in kwargs for key in required_keys):
-            raise ValueError("Missing required keys")
+            raise TypeError("Missing required keys")
         self.__dict__.update(kwargs)
 
     def __repr__(self) -> str:
