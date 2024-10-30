@@ -29,4 +29,4 @@ class UnknownObject(Object):
             if k != "__node__"
         )
 
-        return f"<UnknownObject<{self.get_type()}> {inner_str}>"
+        return f"UnknownObject<{self.get_type()}({inner_str})"

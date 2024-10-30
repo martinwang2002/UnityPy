@@ -1,10 +1,11 @@
 """Generates the classes for the UnityPy objects from the TypeTree of the TPK files."""
 
 from __future__ import annotations
-from dataclasses import dataclass, field
+
 import os
 import sys
-from typing import Dict, Set, Optional, Tuple, List
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set, Tuple
 
 # small hack to import UnityPy from the parent directory instead of the installed package
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -47,8 +48,6 @@ from __future__ import annotations
 from abc import ABC
 from typing import List, Optional, Tuple, TypeVar, Union
 
-from attrs import define as attrs_define
-
 from .math import (
   ColorRGBA,
   Matrix3x4f,
@@ -60,32 +59,11 @@ from .math import (
   float3,
   float4,
 )
-from .Object import Object
+from .Object import Object, SubObject
 from .PPtr import PPtr
 
 T = TypeVar("T")
-
-
-def unitypy_define(cls: T) -> T:
-  \"\"\"
-  A hacky solution to bypass multiple problems related to attrs and inheritance.
-
-  The class inheritance is very lax and based on the typetrees.
-  Some of the child classes might not have the same attributes as the parent class,
-  which would make type-hinting more tricky, and breaks attrs.define.
-
-  Therefore this function bypasses the issue
-  by redifining the bases for problematic classes for the attrs.define call.
-  \"\"\"
-  bases = cls.__bases__
-  if bases[0] in (object, Object, ABC):
-    cls = attrs_define(cls, slots=True, unsafe_hash=True)
-  else:
-    cls.__bases__ = (Object,)
-    cls = attrs_define(cls, slots=False, unsafe_hash=True)
-    cls.__bases__ = bases
-  return cls
-"""[0:]
+"""[1:]
 
 # LIST_BASE_TYPE_MAP = {
 #     "short": "np.int16",
@@ -139,7 +117,7 @@ class NodeClassField:
         if len(self.types) == 1:
             typ = next(iter(self.types))
         else:
-            typ = f"Union[{', '.join(self.types)}]"
+            typ = f"Union[{', '.join(sorted(self.types))}]"
 
         if self.optional:
             return f"  {self.clean_name}: Optional[{typ}] = None"
@@ -176,7 +154,7 @@ class NodeClass:
         if self.abstract:
             parents.append("ABC")
 
-        parentsString = f"({', '.join(parents)})" if parents else ""
+        parentsString = f"({', '.join(parents)})" if parents else "(SubObject)"
 
         if len(self.fields) == 0:
             field_strings = ["  pass"]
@@ -187,7 +165,6 @@ class NodeClass:
             )
         return "\n".join(
             [
-                "@unitypy_define",
                 f"class {self.name}{parentsString}:",
                 *field_strings,
             ]
